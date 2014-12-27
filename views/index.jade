@@ -1,5 +1,26 @@
 extends layout
 
 block content
-  h1= title
-  p Welcome to #{title}
+  div.title
+    span
+      TITLE - XPUSH SERVER MONITORING SYSTEM
+    div.toolbar
+      ul.timepanel
+        li.timepanel.live.selected
+          a.play(href='#') live
+        li.timepanel
+          a.range(href='#', title='60') 1h
+        li.timepanel
+          a.range(href='#', title='180') 3h
+        li.timepanel
+          a.range(href='#', title='1440') 1d
+        li.timepanel
+          a.range(href='#', title='10080') 1w
+      ul.toggle
+        li.toggle-nonum
+          a(href='#')
+            img(src='images/toggle-number.png')
+        li.toggle-night
+          a(href='#')
+            img(src='images/toggle-night.png')
+  div.main

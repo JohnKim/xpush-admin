@@ -1,0 +1,66 @@
+#!/usr/bin/env node
+var debug     = require('debug')('xpush-admin');
+var app       = require('../app');
+var collector = require('../collector');
+var influx    = require('influx');
+var argv      = require('optimist').argv;
+var fs        = require('fs');
+var util      = require('util');
+
+var help = [
+  "usage: xpush-admin [options]",
+  ""
+].join('\n');
+
+if (argv.h || argv.help || Object.keys(argv).length === 2 || !argv.config) {
+  return util.puts(help);
+}
+
+
+var config = {};
+
+try {
+  var data = fs.readFileSync(argv.config);
+  config = JSON.parse(data.toString());
+} catch (ex) {
+  console.error('Error starting xpush-admin server: ' + ex);
+  process.exit(1);
+}
+
+var serverInflux = influx({
+  host : config.influxdb.host,
+  port : config.influxdb.port});
+
+app.set('port', process.env.PORT || 3000);
+
+function startApp() {
+
+  collector.start(config);
+
+  var server = app.listen(app.get('port'), function() {
+
+    var host = server.address().address
+    var port = server.address().port
+
+    debug('xpush-admin server listening at http://%s:%s', host, port)
+
+  });
+
+}
+
+serverInflux.getDatabaseNames(function(err, dbs) {
+  if(err) throw err;
+  if(dbs.indexOf(config.influxdb.database) === -1) {
+    console.log('Creating Database');
+    serverInflux.createDatabase(config.influxdb.database, function(err) {
+      if(err) throw err;
+      console.log('Creating User');
+      serverInflux.createUser(config.influxdb.database, config.influxdb.username, config.influxdb.password, function(err) {
+        if(err) throw err;
+        startApp();
+      });
+    });
+  } else {
+    startApp();
+  }
+});
