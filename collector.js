@@ -1,6 +1,7 @@
 var zookeeper = require('node-zookeeper-client'),
     influx    = require('influx'),
-    io        = require('socket.io-client');
+    io        = require('socket.io-client')
+    debug     = require('debug')('xpush-admin');
 
 var collector = function(){
 
@@ -22,9 +23,7 @@ var collector = function(){
 
 collector.prototype.start = function(config){
 
-  var self = this;
-
-  self.dbInflux = influx({
+  this.dbInflux = influx({
     host :     config.influxdb.host,
     port :     config.influxdb.port,
     username : config.influxdb.username,
@@ -32,15 +31,24 @@ collector.prototype.start = function(config){
     database : config.influxdb.database
   });
 
-  self.collect(config);
-
   var address = config.zookeeper.address || 'localhost:2181';
 
-  var zkClient = zookeeper.createClient(address);
+  this.zkClient = zookeeper.createClient(address);
+  this.zkClient.connect();
 
-  zkClient.connect();
+  this.watchingNodes(config);
+  this.collect(config);
 
-  zkClient.getChildren(self.constants.BASE_ZNODE_PATH + self.constants.SERVERS_PATH, function(error, nodes, stats) {
+};
+
+collector.prototype.watchingNodes = function(config){
+
+  var self = this;
+
+  this.zkClient.getChildren(self.constants.BASE_ZNODE_PATH + self.constants.SERVERS_PATH, function (event) {
+    self.watchingNodes(config);
+  },
+  function(error, nodes, stats) {
 
     if (error) {
       console.error('Error watching zookeeper nodes: ', error);
@@ -59,18 +67,16 @@ collector.prototype.start = function(config){
 
         self.ios[ninfo[1]] = io.connect(
           'http://'+ninfo[1]+'/admin?'+query,
-          { transsessionPorts: ['websocket'] ,'force new connection': true }
+        { transsessionPorts: ['websocket'] ,'force new connection': true }
         );
 
         self.ios[ninfo[1]].on( 'connect', function (){
-
-          console.log(' >>>>>>>>>>>>>> ', 'asdf');
-
-          self.checks[ninfo[1]] = false;
+          debug(this);
+          /*self.checks[ninfo[1]] = false;
 
           self.ios[ninfo[1]].emit('usage', function(data){
-            self.infos[ninfo[1]] = data;
-          });
+          self.infos[ninfo[1]] = data;
+        });*/
 
         });
 
@@ -114,9 +120,9 @@ collector.prototype.collect = function(config){
 
         self.ios[self.servers[i].url].emit('usage', function(data){
 
-          var tname = 'channel.memory.'+ _servers.id ;
+          var tname = 'channel.memory.'+ data.name ;
           console.log(' >>> ',tname, data);
-          self.dbInflux.writePoint(tname , { time: new Date(), value: JSON.stringify(data.process.memory) }, function(err) {
+          self.dbInflux.writePoint(tname , { time: new Date(), value: JSON.stringify(data.memory) }, function(err) {
             if(err) throw err;
           });
 
